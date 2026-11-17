@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/34983588/README.1.md)
+
 # f1deg — ієрархічна беєсівська модель простору станів для деградації шин «Формули-1»
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24141733.svg)](https://doi.org/10.5281/zenodo.24141733)
