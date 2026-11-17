@@ -1,10 +1,11 @@
+[README.md](https://github.com/user-attachments/files/34982367/README.md)
 # f1deg — ієрархічна беєсівська модель простору станів для деградації шин «Формули-1»
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24141733.svg)](https://doi.org/10.5281/zenodo.24141733)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Код до статті Ю. Маркова та Д. Таврова «Ієрархічна беєсівська модель простору станів для оцінювання деградації
-шин болідів „Формули-1“» (Вісник НТУ «ХПІ». Серія: Динаміка та міцність машин; стаття на рецензуванні).
+шин болідів „Формули-1“», поданої до журналу «Вісник НТУ «ХПІ». Серія: Динаміка та міцність машин».
 Пакет `f1deg` 1.2.0.
 
 **English summary.** Reproducible code for a hierarchical Bayesian state-space model of Formula 1 tyre degradation,
@@ -35,7 +36,7 @@ the paper. Quick start: `python scripts/run_pipeline.py --mode SMOKE`. Code: MIT
 |---|---|
 | `src/f1deg/` | пакет: дані, модель, sampler із контрольними точками, діагностика, предиктивні перевірки, PSIS-LOO, прогноз, експорт |
 | `f1_tyre_degradation_revision.ipynb` | notebook: той самий конвеєр із поясненнями й виходами запуску `FULL-2483ee9f` |
-| `f1_tyre_degradation_hierarchical_ssm.ipynb` | notebook попередньої версії (до рецензування) |
+| `f1_tyre_degradation_hierarchical_ssm.ipynb` | notebook першої версії дослідження |
 | `scripts/run_pipeline.py` | запуск конвеєра з командного рядка (`--mode`, `--fits`, `--list`, `--extend`, `--stage`) |
 | `scripts/run_recovery_study.py` | відновлення параметрів на синтетичних даних (багато реплік, паралельні процеси, `--merge`) |
 | `scripts/fetch_fastf1.py` | повторне завантаження даних FastF1 в окремий файл-знімок |
@@ -43,13 +44,10 @@ the paper. Quick start: `python scripts/run_pipeline.py --mode SMOKE`. Code: MIT
 | `scripts/build_notebook.py`, `scripts/fit_worker.py`, `scripts/make_zip.py` | генератор чистого notebook; процес одного оцінювання для тестів; пакування архіву |
 | `forecast_diagnostics.py`, `forecast_mc_check.py` | додаткові перевірки прогнозу (ваги фільтра частинок, похибка Монте-Карло) |
 | `config.yaml` | конфігурація: seed, правила очищення, sampler, черга оцінювань |
-| `tests/` | тести: розподіл Гансена, модель, побітове відновлення після переривання, експорт; `tests/rev2/` — тести змін після рецензування |
-| `docs/` | задум і план редакції: аудит, реєстр моделей, матриця відповіді рецензентам, план запусків, перелік змін |
+| `tests/` | тести: розподіл Гансена, модель, побітове відновлення після переривання, експорт; `tests/rev2/` — тести моделей-варіантів, PSIS-LOO, прогнозу й сумісності ідентифікаторів |
+| `docs/` | документація: реєстр моделей із формулами, аудит, план запусків, відповідь рецензентам, перелік змін |
 | `results_sandbox/` | таблиці дослідження відновлення параметрів на скорочених ланцюгах |
 | `data/` | дані (розділ «Дані») |
-
-`docs/` описує задум і план редакції станом на 14.11.2026. Фактичний стан експериментів показує
-`python scripts/run_pipeline.py --mode FULL --list` і файли `outputs_local/full/reports/`.
 
 ## Встановлення
 
@@ -83,9 +81,9 @@ pip install -r requirements.txt
 
 ```bash
 python scripts/run_pipeline.py --mode SMOKE          # синтетичні дані: перевірка всього конвеєра (≈ 20 хв)
-python -m pytest tests/rev2 -q                       # тести редакції (один із них потребує файла даних)
+python -m pytest tests/rev2 -q                       # тести моделей-варіантів, PSIS-LOO, прогнозу, сумісності
 python -m pytest tests -q                            # усі тести, зокрема побітове відновлення після переривання (≈ 15 хв)
-python scripts/run_pipeline.py --mode FULL --list    # стан кожного експерименту на диску; нічого не запускає
+python scripts/run_pipeline.py --mode FULL --list    # стан кожного оцінювання на диску; нічого не запускає
 ```
 
 Режими: `SMOKE` — синтетичні дані, короткі ланцюги; `PILOT` — три траси, короткі ланцюги (оцінка часу); `FULL` — усі
@@ -95,18 +93,21 @@ python scripts/run_pipeline.py --mode FULL --list    # стан кожного �
 
 ## Відтворення результатів статті
 
+Результати статті отримано в запуску `FULL-2483ee9f`: 4 ланцюги × (2000 + 2000), `target_accept` 0,95,
+`max_treedepth` 12.
+
 ```bash
 python scripts/run_pipeline.py --mode FULL                       # черга run_fits із config.yaml
-python scripts/run_pipeline.py --mode FULL --fits clean_110      # одне оцінювання до вже порахованих
+python scripts/run_pipeline.py --mode FULL --fits clean_110      # окреме оцінювання до вже порахованих
 python scripts/run_pipeline.py --mode REPORT_ONLY                # таблиці, рисунки, звіти без MCMC
 ```
 
 Після черги похідні етапи виконуються автоматично. Результати лягають в `outputs_local/full/`: `fits/` (ланцюги),
-`diagnostics/`, `ppc/`, `loo/`, `forecast/`, `tables/`, `figures/`, `reports/` і `paper/` (таблиці статті,
-`paper_numbers.json` з усіма числами тексту й `MISSING.md` — чого ще бракує).
+`diagnostics/`, `ppc/`, `loo/`, `forecast/`, `tables/`, `figures/`, `reports/` (зокрема стан і діагностика кожного
+оцінювання в `experiments_status.csv`) і `paper/` (таблиці статті та `paper_numbers.json` з усіма числами тексту).
 
 `--extend 1` продовжує ланцюги завершеного оцінювання без нової адаптації. Для навчальних оцінювань це змінює
-вибірку, з якої береться прогноз, тому в статті наведено неподовжені оцінювання.
+вибірку, з якої береться прогноз, тому в статті наведено результати неподовжених оцінювань.
 
 ### Основні специфікації
 
@@ -126,15 +127,6 @@ python scripts/run_pipeline.py --mode REPORT_ONLY                # таблиц�
 
 Повний реєстр (29 специфікацій) — `docs/MODEL_REGISTRY_uk.md`.
 
-### Стан оцінювань (17.11.2026)
-
-Запуск `FULL-2483ee9f`. Завершено 12 оцінювань: `primary`, `noint`, `gauss`, `studentt`, `gamma_fixed`, `unpooled`,
-`signed_full`, `primary_train`, `gauss_train`, `pooled_train`, `ch_adapted_train`, `unpooled_train`. У `signed_full`
-один із чотирьох ланцюгів завершив адаптацію з кроком, на порядок меншим, ніж в інших, тому це оцінювання буде
-повторено.
-Ще не запускалися `clean_110`, `minlaps_8`, `race_effect` та інші специфікації реєстру. Діагностику кожного
-оцінювання записано в `outputs_local/full/reports/experiments_status.csv`.
-
 ### Відновлення параметрів на синтетичних даних
 
 ```bash
@@ -143,7 +135,7 @@ python scripts/run_recovery_study.py --merge outputs_local/recovery_study --out 
 ```
 
 Кілька процесів можна запускати паралельно на різних діапазонах реплік (`--start`, `--stop`) з окремими `--out`, а
-потім об'єднати через `--merge`. Поки власного дослідження в `outputs_local/` немає, `REPORT_ONLY` бере таблиці з
+потім об'єднати через `--merge`. Якщо власного дослідження в `outputs_local/` немає, `REPORT_ONLY` бере таблиці з
 `results_sandbox/` і зазначає це в підписах.
 
 ## Після вимкнення електрики
@@ -160,16 +152,16 @@ sampler — позиція, градієнт, стан адаптації, ге�
 * Відбиток оцінювання — SHA-256 від даних і правил очищення, специфікації моделі й апріорних розподілів,
   налаштувань ядра й адаптації та версій бібліотек. Зміна будь-чого з цього створює нове оцінювання й не зачіпає
   старого.
-* Поля специфікації, додані після рецензування, не входять у відбиток, доки мають значення, за якого модель
-  збігається з попередньою; тому оцінювання першого запуску лишаються чинними
+* Поля специфікації, додані до пакета пізніше, не входять у відбиток, доки мають значення, за якого модель
+  збігається з попередньою; тому раніше пораховані оцінювання лишаються чинними
   (`tests/rev2/test_rev2_fingerprint_compat.py`).
 * Таблицю апріорних розподілів статті генерує функція `model.prior_table`, яку використовує й сама модель.
 * Стан кожного оцінювання визначається за сховищем контрольних точок на диску; реєстр етапів — лише кеш.
 
 ## Як цитувати
 
-Код: Ю. Марков, Д. Тавров. *f1deg: hierarchical Bayesian state-space model of Formula 1 tyre degradation*,
-версія 1.2.0. Zenodo. https://doi.org/10.5281/zenodo.24141733
+Ю. Марков, Д. Тавров. *f1deg: hierarchical Bayesian state-space model of Formula 1 tyre degradation*, версія 1.2.0.
+Zenodo, 2026. https://doi.org/10.5281/zenodo.24141733
 
 ```bibtex
 @software{markov_tavrov_f1deg_2026,
@@ -183,8 +175,7 @@ sampler — позиція, градієнт, стан адаптації, ге�
 }
 ```
 
-Для відтворення результатів статті цитуйте DOI тієї версії архіву, з якою їх отримано (його показано на сторінці
-запису Zenodo). Машиночитний опис — у `CITATION.cff`. Бібліографічні дані статті буде додано після публікації.
+Машиночитний опис для цитування — у `CITATION.cff`.
 
 ## Ліцензія
 
