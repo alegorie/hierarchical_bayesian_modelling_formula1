@@ -1,377 +1,147 @@
+# f1deg — ієрархічна беєсівська модель простору станів для деградації шин «Формули-1»
 
-```markdown
-# Hierarchical Bayesian State-Space Model for Formula 1 Tyre Degradation
+Код до статті Ю. Маркова та Д. Таврова «Ієрархічна беєсівська модель простору станів для оцінювання
+деградації шин болідів „Формули-1“» (версія після першого рецензування, пакет `f1deg` 1.2).
 
-A reproducible Bayesian analysis of **Formula 1 tyre degradation from 2022–2024**, implemented in **PyMC**.
+*English summary.* Reproducible code for a hierarchical Bayesian state-space model of Formula 1 tyre
+degradation (seasons 2022–2024, FastF1 lap data): NumPyro/JAX NUTS with exact checkpoint/resume,
+MCMC diagnostics, prior/posterior predictive checks, PSIS-LOO, parameter recovery on synthetic data,
+leave-future-out forecasts and automatic export of every table and figure of the paper.
 
-The project extends a single-driver state-space approach to a multi-season, multi-track and multi-driver setting. Its main goal is to estimate tyre degradation while separating it from important confounding effects such as **fuel burn-off, track evolution, driver differences, constructor differences and track-specific behaviour**.
+## Що тут є
 
-The primary analysis is contained in:
+| Шлях | Зміст |
+|---|---|
+| `src/f1deg/` | пакет: дані, модель, sampler із контрольними точками, діагностика, перевірки, прогноз, експорт |
+| `f1_tyre_degradation_revision.ipynb` | notebook: той самий конвеєр із поясненнями та збереженими результатами запуску `FULL-2483ee9f` |
+| `scripts/run_pipeline.py` | запуск конвеєра з командного рядка (`--mode`, `--fits`, `--list`, `--extend`, `--stage`) |
+| `scripts/run_recovery_study.py` | дослідження відновлення параметрів на синтетичних даних (багато реплік, кілька паралельних процесів, `--merge`) |
+| `scripts/update_docx_figures.py` | заміна рисунків у DOCX статті на щойно згенеровані |
+| `scripts/build_notebook.py` | генератор чистого notebook (без виходів); виконаний notebook не перезаписує без `--force` |
+| `scripts/fit_worker.py`, `scripts/fetch_fastf1.py`, `scripts/make_zip.py` | процес одного оцінювання для тестів відновлення; завантаження даних FastF1; пакування архіву |
+| `forecast_diagnostics.py`, `forecast_mc_check.py` | додаткові перевірки прогнозу (вироджені ваги фільтра частинок, похибка Монте-Карло) |
+| `config.yaml` | конфігурація (seed, sampler, черга оцінювань) |
+| `tests/` | тести: розподіл Гансена, модель, побітове відновлення після переривання, експорт; `tests/rev2/` — тести змін після рецензування |
+| `docs/` | підсумок редакції (`SUMMARY_uk.md` — почніть із нього), аудит, реєстр моделей із формулами, матриця відповіді рецензентам, план запусків, перелік змін, перевірка списку літератури |
+| `results_sandbox/` | таблиці дослідження відновлення параметрів, виконаного на скорочених ланцюгах 2 × (300 + 400): `recovery_study/` (табл. 9 і рис. 8 статті), `recovery_study_large/` (той самий основний сценарій на утричі більшій вибірці) |
+| `data/` | сюди покласти `f1_cache_combined_2022_2024.csv` (дані FastF1; у репозиторій не входять) |
 
-```text
-f1_tyre_degradation_hierarchical_ssm.ipynb
-```
-
-and uses the accompanying cached Formula 1 lap dataset:
-
-```text
-f1_cache_combined_2022_2024.csv
-```
-
-## Motivation
-
-Raw lap-time trends within a stint are not direct measurements of tyre degradation. During a race, lap times are simultaneously affected by several processes:
-
-- tyres generally lose performance with increasing tyre age;
-- fuel mass decreases throughout the race, tending to make the car faster;
-- track conditions may improve or deteriorate;
-- drivers and constructors differ systematically;
-- degradation varies across compounds and circuits;
-- occasional slow laps create a heavy and asymmetric right tail in the lap-time distribution.
-
-Consequently, a simple regression of lap time on tyre age can produce misleading degradation estimates, including negative raw slopes at some circuits. This repository models these effects jointly in a hierarchical Bayesian state-space framework.
-
-## Research questions
-
-The notebook is designed to investigate questions such as:
-
-1. How quickly do **SOFT, MEDIUM and HARD** tyres degrade after accounting for fuel and other contextual effects?
-2. How much does degradation vary between **tracks, drivers and constructors**?
-3. Does a **track × compound interaction** materially improve the representation of degradation?
-4. How large is the apparent fuel/track-evolution effect at each circuit?
-5. How uncertain are driver, constructor and track degradation rankings?
-6. Does the asymmetric **Hansen skewed-t likelihood** provide a better description than a symmetric Student-t alternative?
-
-## Model overview
-
-For each cleaned race lap, the outcome is the lap time centred by the median cleaned lap time of the corresponding race.
-
-Conceptually, the observation model is
-
-\[
-y_n = \alpha_n + \gamma_{q(n)}\,\mathrm{fuel}_n + \varepsilon_n,
-\]
-
-where:
-
-- \(y_n\) is the race-centred lap time;
-- \(\alpha_n\) is latent racing pace;
-- \(\gamma_{q(n)}\) is a track-specific coefficient capturing the fuel-related trend together with residual systematic track evolution;
-- \(\varepsilon_n\) follows the selected robust likelihood.
-
-Within each stint, latent pace evolves approximately as
-
-\[
-\alpha_{t+1} = \alpha_t + \nu_s\,\Delta\mathrm{age}_t + \eta_t,
-\]
-
-where \(\nu_s\) is the stint-specific degradation rate and \(\eta_t\) optionally introduces process noise.
-
-The degradation rate is modelled hierarchically on the log scale using partially pooled effects for contextual factors including:
-
-- tyre compound;
-- track;
-- driver;
-- constructor;
-- optional track × compound interaction.
-
-The primary likelihood is the **Hansen skewed-t distribution**, which accommodates the strong asymmetric slow-lap tail observed in race data. A symmetric Student-t likelihood is available as a robustness comparison.
-
-## Data
-
-The included CSV contains cached Formula 1 race-lap data for **2022, 2023 and 2024**.
-
-Raw dataset dimensions:
-
-```text
-74,605 rows × 51 columns
-```
-
-Examples of available fields include:
-
-- season, event and circuit;
-- driver and team;
-- lap number and stint number;
-- tyre compound and tyre life;
-- lap and sector times;
-- pit-in and pit-out indicators;
-- track status;
-- speed-trap measurements;
-- lap validity/deletion flags.
-
-The notebook performs its own cleaning before model fitting. Important exclusions include invalid/deleted laps, wet-weather compounds, pit in/out laps, unsuitable track-status observations and very short stints.
-
-Only the dry compounds
-
-```text
-SOFT / MEDIUM / HARD
-```
-
-are used in the degradation model.
-
-## Repository structure
-
-```text
-.
-├── README.md
-├── f1_cache_combined_2022_2024.csv
-└── f1_tyre_degradation_hierarchical_ssm.ipynb
-```
-
-If the notebook has a different local filename, either rename it or open it directly in Jupyter; the dataset filename is controlled by `DATA_PATH` in the configuration cell.
-
-## Notebook workflow
-
-The notebook is organized as a complete analysis pipeline:
-
-```text
-0. Environment and configuration
-1. Dataset inspection
-2. Cleaning
-3. Optional QUICK_RUN subsampling
-4. Outcome, covariates and index construction
-5. Exploratory data analysis
-6. Model structure, priors and identifiability
-7. PyMC implementation
-8. Prior predictive checks
-9. Posterior sampling
-10. Convergence diagnostics
-11. Posterior predictive checks
-12. Posterior analysis of effects
-13. Rankings with uncertainty
-14. Example stint reconstruction
-15. Discussion and limitations
-```
-
-## Installation
-
-Python **3.12** is recommended.
-
-A minimal environment can be created with Conda:
+## Встановлення
 
 ```bash
-conda create -n f1ssm python=3.12 -y
-conda activate f1ssm
-pip install pymc arviz nutpie pandas plotly scipy h5netcdf h5py ipywidgets
+python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-Optional packages:
+Результати статті отримано з Python 3.12.16, NumPy 2.5.3, JAX 0.12.0.1, NumPyro 0.22.0, ArviZ 1.3.0,
+pandas 3.0.5, SciPy 1.18.1 (ОС Windows, CPU, подвійна точність). Версії `python`, `numpy`, `jax`,
+`numpyro` входять у відбиток кожного оцінювання: з іншими версіями код працює, але вже пораховані
+ланцюги не підхоплюються, а рахуються заново.
+
+## Дані
+
+Файл `data/f1_cache_combined_2022_2024.csv` — кола гонок 2022–2024 рр., завантажені бібліотекою
+[FastF1](https://github.com/theOehrly/Fast-F1) (74 605 рядків, 68 гонок). Потрібні стовпці перелічено
+в `src/f1deg/data.py` (`REQUIRED_COLUMNS`). Умови використання даних визначає їхнє джерело
+(FastF1 / офіційний хронометраж Formula 1); у репозиторії даних немає.
+
+## Швидкий старт
 
 ```bash
-# Static Plotly image export
-pip install kaleido
-
-# Alternative NumPyro/JAX NUTS backend
-pip install numpyro jax jaxlib
-
-# Optional model graph rendering
-pip install graphviz
+python scripts/run_pipeline.py --mode SMOKE          # синтетичні дані, перевірка всього конвеєра (хвилини)
+python -m pytest tests/rev2 -q                       # тести редакції (хвилини; один із них потребує файла даних)
+python -m pytest tests -q                            # усі тести, зокрема побітове відновлення після переривання (≈ 15 хв)
+F1DEG_RUN_SLOW=1 python -m pytest tests/rev2 -q      # ще й тест жорсткого переривання моделі з фіксованими масштабами
+                                                     # (Windows cmd: set F1DEG_RUN_SLOW=1; PowerShell: $env:F1DEG_RUN_SLOW=1)
+python scripts/run_pipeline.py --mode FULL --list    # стан кожного експерименту на диску; нічого не запускає
 ```
 
-The notebook was developed for modern PyMC/ArviZ versions and documents its tested package versions in the environment section.
+Режими: `SMOKE` — синтетичні дані; `PILOT` — три траси, короткі ланцюги (оцінка часу);
+`FULL` — усі дані, 4 ланцюги × (2000 адаптації + 2000 збережених ітерацій); `REPORT_ONLY` — без MCMC:
+діагностика, предиктивні перевірки, PSIS-LOO, прогноз, таблиці, рисунки та звіти з уже збережених ланцюгів.
 
-## Running the analysis
+Результати режимів `SMOKE` і `PILOT` не є результатами статті.
 
-Clone the repository and place the notebook and CSV in the same directory.
-
-Then start Jupyter:
+## Відтворення результатів статті
 
 ```bash
-jupyter lab
+python scripts/run_pipeline.py --mode FULL           # черга run_fits із config.yaml
+python scripts/run_pipeline.py --mode REPORT_ONLY    # таблиці, рисунки, звіти
 ```
 
-or
+Вихідні файли: `outputs_local/full/` — `fits/` (ланцюги), `diagnostics/`, `ppc/`, `loo/`, `forecast/`,
+`tables/`, `figures/` (PDF і PNG, підписи в `captions_uk.json`), `reports/`, `paper/` (таблиці статті,
+`paper_numbers.json`, `MISSING.md` — чого ще бракує). Порядок і вартість запусків — у
+`docs/RUN_PLAN_uk.md`; кожна модель із формулами та фактичним станом — у `docs/MODEL_REGISTRY_uk.md`.
+
+Окреме оцінювання додається до вже порахованих так:
 
 ```bash
-jupyter notebook
+python scripts/run_pipeline.py --mode FULL --fits clean_110
 ```
 
-Open the notebook and run the cells sequentially.
+Якщо завершене оцінювання не виконує порогів R̂ або ESS, його ланцюги можна продовжити без нової
+адаптації (кількість збережених ітерацій подвоюється):
 
-The default data path is:
-
-```python
-DATA_PATH = "f1_cache_combined_2022_2024.csv"
+```bash
+python scripts/run_pipeline.py --mode FULL --fits noint --extend 1
 ```
 
-## Configuration
+### Чи дає користь саме ієрархічне об’єднання
 
-The main experiment settings are centralized near the beginning of the notebook.
+Специфікації `unpooled` і `unpooled_train` мають той самий лінійний предиктор, що й основна модель, і ті самі
+обмеження нульової суми, але ефекти траси, пілота, конструктора та взаємодії отримують **фіксовані** апріорні
+масштаби (0,5; 0,3; 0,3; 0,3 — параметри напівнормальних розподілів відповідних σ основної моделі), а
+σ_T, σ_D, σ_G, σ_I не оцінюються. Отже, моделі різняться лише тим, чи навчається масштаб, тобто сила об’єднання.
 
-### Full vs quick run
-
-```python
-QUICK_RUN = False
+```bash
+python scripts/run_pipeline.py --mode FULL --fits unpooled_train unpooled
 ```
 
-Set `QUICK_RUN=True` for a smaller representative five-track analysis using:
+Після завершення `forecast/forecast_hierarchy_ablation.csv` (і `paper/tab8d_hierarchy_ablation.md`) містить парні
+різниці MAE, CRPS і LPD за гонками між `pooled_train` (без групових ефектів), `unpooled_train` і `primary_train`,
+а `tables/pooling_effects_primary_vs_unpooled.csv` — ті самі ефекти за навчених і за фіксованих масштабів.
 
-```python
-["Sakhir", "Suzuka", "Barcelona", "Monza", "Jeddah"]
+### Відновлення параметрів на синтетичних даних
+
+```bash
+python scripts/run_recovery_study.py --scenarios baseline known_gamma identity_rates identity_zero race_effect phase_confounded --start 0 --stop 10 --out outputs_local/recovery_study
+python scripts/run_recovery_study.py --merge outputs_local/recovery_study --out outputs_local/recovery_study
 ```
 
-This is useful for development and model checks. The full analysis uses all available cleaned tracks.
+Кілька процесів можна запускати паралельно на різних діапазонах реплік (`--start`, `--stop`) з окремими
+`--out`, а потім об’єднати їх через `--merge`. Більший синтетичний набір задають `--tracks` і `--seasons`
+(окремий `--out`, таблиці з `--tag _large`). Поки власного дослідження в `outputs_local/` немає,
+`REPORT_ONLY` бере таблиці з `results_sandbox/` і зазначає це в підписах.
 
-### Sampling
+### Після вимкнення електрики
 
-Default settings are:
+Запустіть ту саму команду ще раз. Кожні `checkpoint_every` = 25 переходів на диск атомарно записується
+повний стан sampler (позиція, градієнт, стан адаптації, генератори випадкових чисел) разом із
+контрольними сумами; незавершений хвіст відкидається, завершені етапи пропускаються. Продовжений
+ланцюг побітово збігається з безперервним (тести `tests/test_resume.py`).
 
-```python
-CHAINS        = 4
-N_TUNE        = 2000
-N_DRAWS       = 2000
-TARGET_ACCEPT = 0.95
-SEED          = 20260610
-```
+## Відтворюваність
 
-The sampler can be selected with:
+* Єдине початкове число `seed: 20260610`; з нього SHA-256 виводить окремі числа для кожного ланцюга,
+  етапу, репліки та відрізка прогнозу (`config.derive_seed`).
+* Відбиток оцінювання = SHA-256 від (дані в порядку спостережень і правила очищення; специфікація
+  моделі та апріорних розподілів; налаштування ядра й адаптації; версії бібліотек). Зміна будь-чого з
+  цього створює нове оцінювання й не зачіпає старе.
+* Нові поля специфікації, додані після рецензування, не входять у відбиток, доки мають значення, за
+  якого модель збігається з попередньою, тому вісім оцінювань запуску `FULL-2483ee9f` лишаються чинними
+  (`tests/rev2/test_rev2_fingerprint_compat.py`).
+* Таблиця апріорних розподілів (табл. 1 статті) генерується функцією `model.prior_table`, яку
+  використовує й сама модель.
+* Стан кожного експерименту («реалізовано», «запущено», «завершено», «пройшов діагностику»)
+  визначається лише за файлами на диску (`reports/experiments_status.csv`).
 
-```python
-SAMPLER = "auto"
-```
+## Як цитувати
 
-Automatic selection attempts the supported high-performance backends before falling back to standard PyMC sampling.
+Див. `CITATION.cff`. Постійний ідентифікатор (DOI) версії коду, що відповідає статті, слід створити через
+Zenodo після публікації релізу й вписати в `CITATION.cff` та в статтю.
 
-### Model switches
+## Ліцензія
 
-The main specification can be modified through:
-
-```python
-LIKELIHOOD    = "skewt"
-PROCESS_NOISE = True
-INTERACTION   = True
-```
-
-Available likelihoods include:
-
-```text
-skewt      Hansen skewed-t; primary specification
-studentt   symmetric Student-t robustness specification
-```
-
-To fit the Student-t model as an additional comparison and calculate PSIS-LOO, enable:
-
-```python
-RUN_STUDENT_T_COMPARISON = True
-```
-
-Note that this requires fitting a second model and therefore substantially increases runtime.
-
-## Cleaning settings
-
-Important defaults include:
-
-```python
-MIN_STINT_LAPS  = 5
-MAX_REL_LAPTIME = 1.30
-FUEL_START_KG   = 110.0
-```
-
-These values are documented and justified in the notebook rather than treated as hidden preprocessing choices.
-
-## Diagnostics
-
-The workflow includes explicit checks for posterior reliability, including:
-
-- split-\(\hat R\);
-- effective sample size;
-- divergences;
-- energy/BFMI diagnostics;
-- posterior geometry and parameter dependence;
-- prior predictive checks;
-- posterior predictive checks.
-
-Do not interpret degradation rankings or group differences from a run that has unresolved convergence problems.
-
-## Outputs
-
-The notebook produces interactive tables and Plotly figures for, among other things:
-
-- raw within-stint degradation slopes;
-- circuit-level degradation patterns;
-- prior predictive behaviour;
-- sampling diagnostics;
-- posterior predictive checks;
-- tyre compound effects;
-- track, driver and constructor effects;
-- track-specific fuel/evolution coefficients;
-- variance decomposition;
-- uncertainty-aware degradation rankings;
-- reconstructed latent pace for representative stints.
-
-When enabled, posterior samples are saved as an ArviZ `InferenceData` NetCDF file:
-
-```text
-idata_f1_tyre_degradation.nc
-```
-
-controlled by:
-
-```python
-SAVE_IDATA = True
-IDATA_PATH = "idata_f1_tyre_degradation.nc"
-```
-
-## Interpretation of rankings
-
-The repository deliberately avoids presenting posterior means as deterministic league tables.
-
-For drivers, constructors and other grouped effects, the notebook reports quantities such as:
-
-- expected posterior rank;
-- probability of being ranked first;
-- probability of being in the top three;
-- posterior intervals for degradation multipliers.
-
-This is important because hierarchical partial pooling naturally shrinks weakly observed groups toward the population mean. A mid-table ranking with high uncertainty can therefore be the correct statistical conclusion rather than missing information from the model.
-
-## Reproducibility
-
-The analysis fixes a random seed and centralizes all major modelling decisions in the configuration cell.
-
-For a reproducible run:
-
-1. use the same CSV input;
-2. use the same Python/package versions;
-3. retain the configuration values;
-4. run the notebook from top to bottom;
-5. archive the resulting `InferenceData` file together with the exact notebook version.
-
-Because Bayesian MCMC results are stochastic, minor numerical differences between machines or sampler backends are expected even when the substantive posterior conclusions are unchanged.
-
-## Computational considerations
-
-The full hierarchical model is computationally intensive. Runtime depends strongly on:
-
-- number of tracks included;
-- interaction term being enabled;
-- number of tuning and posterior draws;
-- sampler backend;
-- CPU/GPU hardware;
-- whether an additional Student-t comparison is requested.
-
-For experimentation, start with `QUICK_RUN=True` and shorter chains. Use the registered full configuration only for final inference after the model and preprocessing pipeline have been validated.
-
-The notebook discusses these limitations in detail and should be consulted before citing individual posterior estimates.
-
-## Methodological background
-
-This work is a multi-driver, multi-track extension inspired by the state-space approach to Formula 1 tyre degradation described by Cappello & Hoegh. The notebook also uses standard Bayesian workflow ideas including hierarchical partial pooling, posterior predictive checking and PSIS-LOO model comparison.
-
-See the notebook's **References** section for the complete bibliography used by the analysis.
-
-## Citation
-
-If you use this repository in academic work, please cite the associated paper or thesis once its final bibliographic information is available.
-
-A repository citation can temporarily be given as:
-
-```text
-Markov, Y. & Tavrov, D. Hierarchical Bayesian State-Space Modelling of
-Tyre Degradation in Formula 1 (2022–2024). Source code and data analysis repository.
-```
-
-## License
-
-No software or data license is specified by the current repository materials. Add an explicit `LICENSE` file before redistribution or public release, and verify that redistribution of the cached Formula 1/FastF1-derived data is compatible with the relevant upstream terms.
-```
+Код — за ліцензією MIT (`LICENSE`; остаточний вибір ліцензії за авторами). Дані до складу репозиторію
+не входять.

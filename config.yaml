@@ -1,0 +1,100 @@
+# Configuration of the revision pipeline (edit here; the notebook reads this file).
+# Modes: SMOKE (synthetic, minutes) | PILOT (3 tracks, real data) | FULL (all data, hours) | REPORT_ONLY
+mode: SMOKE
+data_csv: data/f1_cache_combined_2022_2024.csv
+outputs_root: outputs_local
+seed: 20260610
+resume: true            # continue from the last committed checkpoint after a crash / power cut
+report_only_source: FULL  # REPORT_ONLY regenerates figures/tables/reports from outputs/<this mode>/ without sampling
+force_refit: false      # true = delete the fit directories of this mode and start over
+precision: float64
+interval_prob: 0.94     # ETI for all main results (continuity with the paper); extra levels below are labelled separately
+extra_interval_probs: [0.5, 0.8]
+
+data:
+  fuel_start_kg: 110.0
+  max_rel_laptime: 1.30
+  min_stint_laps: 5       # retained laps (not necessarily consecutive)
+  dry_compounds: [SOFT, MEDIUM, HARD]
+  team_map:
+    AlphaTauri: "RB / AlphaTauri"
+    RB: "RB / AlphaTauri"
+    "Alfa Romeo": "Sauber / Alfa Romeo"
+    "Kick Sauber": "Sauber / Alfa Romeo"
+  drop_lap1: true
+  green_only: true
+  drop_deleted: true
+  drop_pit_laps: true
+
+sampler:
+  backend: numpyro_lowlevel   # the only production backend; no silent fallback
+  chains: 4
+  warmup: 2000
+  draws: 2000
+  target_accept: 0.95             # 0.90 gave a few divergent transitions in the PILOT (short warm-up); the old reference fit used 0.95
+  max_treedepth: 12               # v1.1: було 11. Запуск FULL-2483ee9f виконано з 12 (notebook перевизначав це значення в комірці конфігурації).
+                                  # Поле входить до ідентифікатора оцінювання: з 11 командний рядок не знайшов би готові ланцюги й рахував би їх заново.
+  dense_mass_hyper: true      # dense mass-matrix block for the global hyper-parameters
+  chain_method: sequential    # sequential | vectorized | parallel (pmap; needs XLA host devices = chains)
+  checkpoint_every: 25        # transitions between committed checkpoints (tune with the pilot timing: minutes, not hours, of loss)
+  init_strategy: median
+  find_heuristic_step_size: true
+  save_latent_thin: 10        # keep every 10th draw of the lap-level latent innovations (float32)
+  latent_dtype: float32
+  heartbeat_seconds: 60
+
+pilot_tracks: [Sakhir, Monza, Jeddah]
+
+forecast:
+  train_years: [2022, 2023]
+  test_years: [2024]
+  prefix_fraction: 0.75
+  min_prefix_laps: 4
+  min_target_laps: 2
+  particles: 4000
+  posterior_draws_used: 400
+  centering: first_quarter
+  # v1.1: додано навчальні оцінювання нових специфікацій; незавершені пропускаються й позначаються у звіті як не оцінені
+  # v1.2: додано unpooled_train (ті самі групові ефекти з фіксованими масштабами) — пара до primary_train для перевірки користі адаптивного об'єднання
+  models: [primary_train, gauss_train, pooled_train, ch_adapted_train, noint_train, signed_full_train, race_effect_train, unpooled_train]
+
+ppc:
+  draws: 200
+  batch_laps: 20000
+  quantiles: [0.05, 0.25, 0.5, 0.75, 0.95, 0.99]
+
+recovery:
+  replicates: 3
+  # v1.1: додано identity_rates (справжні швидкості з тотожною функцією зв'язку), race_effect, phase_confounded.
+  # Більше реплік і сценарій identity_zero — окремим скриптом scripts/run_recovery_study.py
+  scenarios: [baseline, known_gamma, weak_signal, no_interaction, signed_rates, identity_rates, race_effect, phase_confounded]
+  sampler: {warmup: 300, draws: 300, chains: 2}
+
+gates:
+  rhat_max: 1.01
+  ess_min: 400
+  mcse_rel_max: 0.05
+  divergences_max: 0
+  ebfmi_min: 0.3
+
+budget:
+  max_extension_rounds: 0     # bounded automatic posterior-target extension when only ESS/MCSE/R-hat gates fail
+  extension_factor: 2.0
+  max_hours_per_fit: 48.0     # v1.1: було 12.0; у запуску FULL notebook ставив 48. A fit pauses (checkpoint committed) when exceeded; rerun to continue
+
+# v1.1: черга оцінювань режиму FULL (порядок = пріоритет). Реєстр із 29 специфікацій при цьому не змінюється:
+# у звітах видно й те, що не запускалося. Вісім оцінювань нижче вже завершено в запуску FULL-2483ee9f і
+# повторно не рахуються (код знаходить їх за ідентифікатором; tests/rev2/test_rev2_fingerprint_compat.py).
+# Наступні черги — docs/RUN_PLAN_uk.md; разова черга задається й з командного рядка:
+#   python scripts/run_pipeline.py --mode FULL --fits clean_110 minlaps_8 ch_adapted_train
+#   python scripts/run_pipeline.py --mode FULL --fits unpooled_train unpooled        (v1.2: фіксовані масштаби групових ефектів)
+# Порожній список або відсутній ключ = уся матриця за пріоритетом.
+run_fits:
+  - primary
+  - noint
+  - gauss
+  - studentt
+  - gamma_fixed
+  - primary_train
+  - gauss_train
+  - pooled_train

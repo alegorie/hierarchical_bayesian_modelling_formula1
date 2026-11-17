@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the article and this repository."
+title: "f1deg: hierarchical Bayesian state-space model of Formula 1 tyre degradation"
+type: software
+version: "1.2.0"
+date-released: "2026-11-14"   # TODO(authors): date of the tagged release
+license: MIT                  # TODO(authors): confirm the licence
+repository-code: "https://github.com/alegorie/hierarchical_bayesian_modelling_formula1"
+# doi: "10.5281/zenodo.XXXXXXX"   # TODO(authors): add after the Zenodo release; do not invent
+authors:
+  - family-names: Markov
+    given-names: Yurii
+  - family-names: Tavrov
+    given-names: Danylo
+preferred-citation:
+  type: article
+  title: "Hierarchical Bayesian state-space model for estimating tyre degradation of Formula 1 cars"
+  authors:
+    - family-names: Markov
+      given-names: Yurii
+    - family-names: Tavrov
+      given-names: Danylo
+  journal: "Bulletin of the National Technical University «KhPI». Series: Dynamics and Strength of Machines"
+  year: 2026                  # TODO(authors): volume, issue, pages, DOI after acceptance
