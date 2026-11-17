@@ -1,7 +1,6 @@
-
 # f1deg — ієрархічна беєсівська модель простору станів для деградації шин «Формули-1»
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24141733.svg)](https://doi.org/10.5281/zenodo.24141733)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24320688.svg)](https://doi.org/10.5281/zenodo.24320688)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Код до статті Ю. Маркова та Д. Таврова «Ієрархічна беєсівська модель простору станів для оцінювання деградації
@@ -160,7 +159,7 @@ sampler — позиція, градієнт, стан адаптації, ге�
 ## Як цитувати
 
 Ю. Марков, Д. Тавров. *f1deg: hierarchical Bayesian state-space model of Formula 1 tyre degradation*, версія 1.2.0.
-Zenodo, 2026. https://doi.org/10.5281/zenodo.24141733
+Zenodo, 2026. https://doi.org/10.5281/zenodo.24320688
 
 ```bibtex
 @software{markov_tavrov_f1deg_2026,
@@ -169,7 +168,7 @@ Zenodo, 2026. https://doi.org/10.5281/zenodo.24141733
   version   = {1.2.0},
   year      = {2026},
   publisher = {Zenodo},
-  doi       = {10.5281/zenodo.24141733},
+  doi       = {10.5281/zenodo.24320688},
   url       = {https://github.com/alegorie/hierarchical_bayesian_modelling_formula1}
 }
 ```
